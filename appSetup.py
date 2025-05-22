@@ -45,13 +45,13 @@ def setupTodoApp(stdscr, todoList, today):
 
     label = f'Current date:'
     title, tl, bounds = createLabel(0, 0, label)
-    windowManager.assign('dateInpLabel', 1, title, bounds, None, tl)
+    windowManager.assign('dateInpLabel', 1, title, bounds, None, tl, rect=False)
 
     win, tl, tbox, bounds = createInputBox(0, len(label)+3, 3, 20, stdscr)
     windowManager.assign('dateInput', 1, win, bounds, tbox, tl)
 
     titleLabel = f'To-do List on date {today}'
-    title, tl, _ = createLabel(0, (c.COLS//2)-(len(titleLabel)//2), titleLabel)
+    title, tl, _ = createLabel(0, (c.COLS//2)-(len(titleLabel)//2), titleLabel, rect=False)
     windowManager.assign('title', 1, title, None, None, tl)
 
     taskwin, tl, taskbounds = createBox(3, 0, 30, (c.COLS*2)//3)
