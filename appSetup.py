@@ -44,8 +44,8 @@ def setupTodoApp(stdscr, todoList, today):
     windowManager = CursesObjectHandler(stdscr)
 
     label = f'Current date:'
-    title, tl, bounds = createLabel(0, 0, label)
-    windowManager.assign('dateInpLabel', 1, title, bounds, None, tl, rect=False)
+    title, tl, bounds = createLabel(0, 0, label, rect=False)
+    windowManager.assign('dateInpLabel', 1, title, bounds, None, tl)
 
     win, tl, tbox, bounds = createInputBox(0, len(label)+3, 3, 20, stdscr)
     windowManager.assign('dateInput', 1, win, bounds, tbox, tl)
