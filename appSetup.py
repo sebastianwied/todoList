@@ -81,7 +81,7 @@ def setupTodoApp(stdscr, todoList, today):
 
     stdscr.hline(22, (c.COLS*2)//3, c.ACS_HLINE, c.COLS//3-1)
 
-    labelCreateOn = 'Create Task On: (mm dd yyyy)'
+    labelCreateOn = 'Create Task On: (yyyy mm dd)'
     win, tl, _ = createLabel(23, (c.COLS*2)//3 + 1, labelCreateOn, rect=False)
     windowManager.assign('createOnLabel', 1, win, None, None, tl)
 

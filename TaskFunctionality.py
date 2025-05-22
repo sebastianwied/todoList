@@ -84,7 +84,8 @@ class TaskObject:
                 'checked':self.checked,
                 'completed':self.completed,
                 'duedate':[self.dueDate.year, self.dueDate.month, self.dueDate.day],
-                'recurring':recur}
+                'recurring':recur,
+                'currentCreatedOn':[self.currentCreatedOn.year,self.currentCreatedOn.month,self.currentCreatedOn.day]}
 
 class ToDoList:
     def __init__(self):
@@ -104,7 +105,10 @@ class ToDoList:
         task.setDue(date(duey, duem, dued))
         if entry['recurring'] != False:
             yr,mm,dd,recurFreq,dueEvery = entry['recurring']
-            task.setRecurring(date(yr,mm,dd),recurFreq,dueEvery)
+            createdOn = entry['currentCreatedOn']
+            createdOn = date(createdOn[0],createdOn[1],createdOn[2])
+            task.recurring = [createdOn, recurFreq, dueEvery]
+            task.currentCreatedOn = createdOn
         if entry['haschildren']:
             task.hasChildren = True
             for child in entry['children']:
