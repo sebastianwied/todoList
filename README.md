@@ -1,4 +1,7 @@
 # How to use!
+## Setup
+Clone this into a directory youd like it to be in. You need python. If on mac, curses should be installed with python. If on windows, run "pip install windows-curses". Run app.py with python and you should be good! All the data is stored in savedData.json.
+
 ## Entering text and using buttons
 Press on the empty boxes next to labels to enter text. The cursor should appear there. Enter the text you want and then press "ctrl" and "g" to exit. Then press the respective button
 
