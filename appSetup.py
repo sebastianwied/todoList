@@ -4,6 +4,7 @@ import curses as c
 from datetime import date, timedelta
 
 def drawTasks(todoList, taskWin, selectedLine):
+    todoList.sort()
     tasks = todoList.tasks
 
     taskWin.clear()
@@ -13,24 +14,26 @@ def drawTasks(todoList, taskWin, selectedLine):
     yInfoSUB = dict()
     i = 1
     for task in tasks:
-        label, attrs = task.label()
+        line1, line2, attrs = task.label()
         cattr = 0
-        if i-1 == selectedLine:
+        if i-1 == selectedLine | i-2 == selectedLine:
             attrs.append(c.A_STANDOUT)
         for attr in attrs: cattr |= attr
-        taskWin.addstr(i, 1, label, cattr)
+        taskWin.addstr(i, 1, line1, cattr)
+        taskWin.addstr(i+1, 1, line2, cattr)
         yInfoTL[i-1] = task
-        i += 1
+        i += 2
 
         for child in task.children:
-            label, attrs = child.label()
+            line1, line2, attrs = child.label()
             cattr = 0
-            if i-1 == selectedLine:
+            if i-1 == selectedLine | i-2 == selectedLine:
                 attrs.append(c.A_STANDOUT)
             for attr in attrs: cattr |= attr
-            taskWin.addstr(i, 4, label, cattr)
+            taskWin.addstr(i, 4, line1, cattr)
+            taskWin.addstr(i+1, 4, line2, cattr)
             yInfoSUB[i-1] = child
-            i += 1
+            i += 2
 
     return taskWin, yInfoTL, yInfoSUB
 
@@ -44,7 +47,7 @@ def setupTodoApp(stdscr, todoList, today):
     windowManager = CursesObjectHandler(stdscr)
 
     label = f'Current date:'
-    title, tl, bounds = createLabel(0, 0, label, rect=False)
+    title, tl, bounds = createLabel(0, 0, label)
     windowManager.assign('dateInpLabel', 1, title, bounds, None, tl)
 
     win, tl, tbox, bounds = createInputBox(0, len(label)+3, 3, 20, stdscr)
@@ -55,7 +58,6 @@ def setupTodoApp(stdscr, todoList, today):
     windowManager.assign('title', 1, title, None, None, tl)
 
     taskwin, tl, taskbounds = createBox(3, 0, 30, (c.COLS*2)//3)
-    taskwin, yTL, ySUB = drawTasks(todoList, taskwin, -1)
     windowManager.assign('tasks', 1, taskwin, taskbounds, None, tl)
     
     label = 'New Task Name (ctrl+g to quit):'
@@ -106,6 +108,13 @@ def setupTodoApp(stdscr, todoList, today):
     win, tl, bounds = createLabel(33, (c.COLS*2)//3 + 1, label)
     windowManager.assign('newRecurringTaskButton', 1, win, bounds, None, tl)
 
+    labelTag = 'Tag:'
+    win, tl, _ = createLabel(33, (c.COLS*2)//3 + 5 + len(label), labelTag, rect=False)
+    windowManager.assign('tagLabel', 1, win, None, None, tl)
+
+    win, tl, tbox, bounds = createInputBox(33, tl[1]+8, 3, (c.COLS//3)-4-len(labelTag)-5-len(label), stdscr)
+    windowManager.assign('tagInput', 1, win, bounds, tbox, tl)
+
     label = 'Create New Task'
     win, tl, bounds = createLabel(33, ((c.COLS*2)//3)-len(label)-4, label)
     windowManager.assign('newTaskButton', 1, win, bounds, None, tl)
@@ -118,11 +127,18 @@ def setupTodoApp(stdscr, todoList, today):
     win, tl, bounds = createLabel(33, 4+len(labelDel)+5, labelComplete)
     windowManager.assign('completeButton', 1, win, bounds, None, tl)
 
-    return windowManager, yTL, ySUB
+    return windowManager
 
-def mainLoop(stdscr, windowManager: CursesObjectHandler, todoList: ToDoList, yTL, ySUB, today):
+def mainLoop(stdscr, windowManager: CursesObjectHandler, todoList: ToDoList, today):
     selected = -1
     changedTaskWin = False
+    todoList.readTasks(today)
+    tags = set()
+
+    _, yTL, ySUB = drawTasks(todoList, windowManager.windows['tasks'], selected)
+    
+    windowManager.refreshWindows()
+    c.doupdate()
     while True:
         key = stdscr.getch()
         if key == ord('q'):
@@ -133,33 +149,10 @@ def mainLoop(stdscr, windowManager: CursesObjectHandler, todoList: ToDoList, yTL
             clicked = windowManager.checkBounds(mx, my)
             # Clicked task window
             if clicked == 'tasks':
-
-                # Select clicked task, and check if checkbox pressed
-                ty, tx = windowManager.topleft[clicked]
-                selected = my - ty - 1
-                # checkbox locations are x == 1 and x == 4 for subtasks
-                if (selected in yTL.keys()) and (mx-tx) == 1:
-                    checked = yTL[selected]
-                    checked.swapChecked()
-                    index = todoList.tasks.index(checked)
-                    todoList.tasks[index] = checked
-                if (selected in ySUB.keys()) and (mx-tx) == 4:
-                    checked = ySUB[selected]
-                    checked.swapChecked()
-                    parent = checked.parent
-                    index = todoList.tasks.index(parent)
-                    todoList.tasks[index] = parent
-                # update
+                selected = handleTaskClick(todoList, windowManager, yTL, ySUB, my, mx)
                 changedTaskWin = True
             # Clicked input box
-            if clicked in ['newNameInput', 'newDescInput', 'newDueInput', 'dateInput',
-                            'createOnInput', 'recurInput', 'dueEveryInput']:
-                ty, tx = windowManager.topleft[clicked]
-                c.curs_set(1)
-                stdscr.move(ty+1, tx+1)
-                stdscr.refresh()
-                windowManager.tboxes[clicked].edit()
-                c.curs_set(0)
+            checkTextBox(windowManager, stdscr, clicked)
             if clicked == 'dateInpLabel':
                 try:
                     currDate = windowManager.tboxes['dateInput'].gather().strip().split(' ')
@@ -171,73 +164,14 @@ def mainLoop(stdscr, windowManager: CursesObjectHandler, todoList: ToDoList, yTL
                 changedTaskWin = True
                 windowManager.windows['dateInput'].clear()
             # Clicked buttons
-            if clicked == 'newRecurringTaskButton':
-                name = windowManager.tboxes['newNameInput'].gather().strip()
-                desc = windowManager.tboxes['newDescInput'].gather().strip()
-                createOn = windowManager.tboxes['createOnInput'].gather().strip()
-                createOn = date(*map(int, createOn.split(' ')))
-                recurSpacing = int(windowManager.tboxes['recurInput'].gather().strip())
-                dueSpacing = int(windowManager.tboxes['dueEveryInput'].gather().strip())
-                stdscr.addstr(41,0,f'{createOn}, {recurSpacing}, {dueSpacing}')
-                if name != '' and desc != '':
-                    newTask = TaskObject(name, desc)
-                    newTask.setRecurring(createOn, recurSpacing, dueSpacing)
-                    todoList.addTask(newTask)
-                    windowManager.windows['newNameInput'].clear()
-                    windowManager.windows['newDescInput'].clear()
-                    windowManager.windows['createOnInput'].clear()
-                    windowManager.windows['recurInput'].clear()
-                    windowManager.windows['dueEveryInput'].clear()
-                    changedTaskWin = True
-                    selected = len(yTL) + len(ySUB)
-            if clicked == 'newTaskButton':
-                name = windowManager.tboxes['newNameInput'].gather().strip()
-                desc = windowManager.tboxes['newDescInput'].gather().strip()
-                due = windowManager.tboxes['newDueInput'].gather().strip()
-                if name != '' and desc != '':
-                    newTask = TaskObject(name, desc)
-                    if due != '':
-                        due = due.split(' ')
-                        if len(due) == 3:
-                            newTask.setDue(date(int(due[0]), int(due[1]), int(due[2])))
-                            newTask.checkDue(today)
-                    if selected in yTL.keys():
-                        parent = yTL[selected]
-                        index = todoList.tasks.index(parent)
-                        parent.addSubtask(newTask)
-                        todoList.tasks[index] = parent
-                    elif selected in ySUB.keys():
-                        parent = ySUB[selected].parent
-                        index = todoList.tasks.index(parent)
-                        parent.addSubtask(newTask)
-                        todoList.tasks[index] = parent
-                    else:
-                        todoList.addTask(newTask)
-                    windowManager.windows['newNameInput'].clear()
-                    windowManager.windows['newDescInput'].clear()
-                    windowManager.windows['newDueInput'].clear()
-                    changedTaskWin = True
-                    selected = len(yTL) + len(ySUB)
+            if clicked in ['newTaskButton','newRecurringTaskButton']:
+                changedTaskWin, selected = handleNewTask(
+                                            todoList, windowManager, yTL, 
+                                            ySUB, today, selected, clicked)
             if clicked == 'deleteButton':
-                if selected in yTL.keys():
-                    todoList.deleteTask(yTL[selected])
-                if selected in ySUB.keys():
-                    toDel = ySUB[selected]
-                    parent = toDel.parent
-                    parent.deleteSubtask(toDel)
-                changedTaskWin = True
+                changedTaskWin = handleDelete(todoList, selected, yTL, ySUB)
             if clicked == 'completeButton':
-                if selected in yTL.keys():
-                    completed = yTL[selected]
-                    completed.swapCompleted()
-                    index = todoList.tasks.index(completed)
-                    todoList.tasks[index] = completed
-                if selected in ySUB.keys():
-                    completed = ySUB[selected]
-                    completed.swapCompleted()
-                    parent = completed.parent
-                    index = todoList.tasks.index(parent)
-                    todoList.tasks[index] = parent
+                changedTaskWin = handleComplete(todoList, selected, yTL, ySUB)
         if changedTaskWin:
             todoList.checkTasksDue(today, stdscr)
             _, yTL, ySUB = drawTasks(todoList, windowManager.windows['tasks'], selected)
@@ -246,11 +180,106 @@ def mainLoop(stdscr, windowManager: CursesObjectHandler, todoList: ToDoList, yTL
         windowManager.refreshWindows()
         c.doupdate()
 
+def handleDelete(todoList, selected, yTL, ySUB):
+    if selected in yTL.keys():
+        todoList.deleteTask(yTL[selected])
+        return True
+    if selected in ySUB.keys():
+        toDel = ySUB[selected]
+        parent = toDel.parent
+        parent.deleteSubtask(toDel)
+        return True
+    return False
 
+def handleComplete(todoList, selected, yTL, ySUB):
+    if selected in yTL.keys():
+        completed = yTL[selected]
+        completed.swapCompleted()
+        index = todoList.tasks.index(completed)
+        todoList.tasks[index] = completed
+        return True
+    if selected in ySUB.keys():
+        completed = ySUB[selected]
+        completed.swapCompleted()
+        parent = completed.parent
+        index = todoList.tasks.index(parent)
+        todoList.tasks[index] = parent
+        return True
+    return False
 
+def handleNewTask(todoList, windowManager, yTL, ySUB, today, selected, type):
+    name = windowManager.tboxes['newNameInput'].gather().strip()
+    desc = windowManager.tboxes['newDescInput'].gather().strip()
+    tag = windowManager.tboxes['tagInput'].gather().strip()
+    
+    if name != '' and desc != '':
+        newTask = TaskObject(name, desc, today, tag)
+        if type == 'newTaskButton':
+            due = windowManager.tboxes['newDueInput'].gather().strip()
+            if due != '':
+                due = due.split(' ')
+                if len(due) == 3:
+                    newTask.setDue(date(int(due[0]), int(due[1]), int(due[2])))
+                    newTask.checkDue(today)
+        else:
+            createOn = windowManager.tboxes['createOnInput'].gather().strip()
+            if createOn == '': createOn = today
+            else: createOn = date(*map(int, createOn.split(' ')))
+            recurSpacing = windowManager.tboxes['recurInput'].gather().strip()
+            dueSpacing = windowManager.tboxes['dueEveryInput'].gather().strip()
+            if (not recurSpacing.isnumeric() or not dueSpacing.isnumeric()) \
+                or (int(recurSpacing) < int(dueSpacing)): return False, selected
+            newTask.setRecurring(createOn, int(recurSpacing), int(dueSpacing))
+        
+        if selected in yTL.keys():
+            parent = yTL[selected]
+            index = todoList.tasks.index(parent)
+            parent.addSubtask(newTask)
+            todoList.tasks[index] = parent
+        elif selected in ySUB.keys():
+            parent = ySUB[selected].parent
+            index = todoList.tasks.index(parent)
+            parent.addSubtask(newTask)
+            todoList.tasks[index] = parent
+        else:
+            todoList.addTask(newTask)
+        windowManager.windows['newNameInput'].clear()
+        windowManager.windows['newDescInput'].clear()
+        windowManager.windows['tagInput'].clear()
+        windowManager.windows['createOnInput'].clear()
+        windowManager.windows['recurInput'].clear()
+        windowManager.windows['dueEveryInput'].clear()
+        windowManager.windows['newDueInput'].clear()
+        return True, len(yTL) + len(ySUB)
+    return False, selected
 
+def checkTextBox(windowManager, stdscr, clicked):
+    if clicked in ['newNameInput', 'newDescInput', 'newDueInput', 'dateInput',
+                    'createOnInput', 'recurInput', 'dueEveryInput', 'tagInput']:
+        ty, tx = windowManager.topleft[clicked]
+        c.curs_set(1)
+        stdscr.move(ty+1, tx+1)
+        stdscr.refresh()
+        windowManager.tboxes[clicked].edit()
+        c.curs_set(0)
 
-
+def handleTaskClick(todoList, windowManager, yTL, ySUB, my, mx):
+    # Select clicked task, and check if checkbox pressed
+    ty, tx = windowManager.topleft['tasks']
+    selected = my - ty - 1
+    # checkbox locations are x == 1 and x == 4 for subtasks
+    if (selected in yTL.keys()) and (mx-tx) == 1:
+        checked = yTL[selected]
+        checked.swapChecked()
+        index = todoList.tasks.index(checked)
+        todoList.tasks[index] = checked
+    if (selected in ySUB.keys()) and (mx-tx) == 4:
+        checked = ySUB[selected]
+        checked.swapChecked()
+        parent = checked.parent
+        index = todoList.tasks.index(parent)
+        todoList.tasks[index] = parent
+    return selected
 
 
 

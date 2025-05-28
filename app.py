@@ -6,13 +6,10 @@ from datetime import date, timedelta
 
 def main(stdscr):
     todoList = taskFuncs.ToDoList()
-    todoList.readTasks()
 
-    windowManager, yTL, ySUB = setup.setupTodoApp(stdscr, todoList, date.today())
-    
-    windowManager.refreshWindows()
+    windowManager = setup.setupTodoApp(stdscr, todoList, date.today())
 
-    setup.mainLoop(stdscr, windowManager, todoList, yTL, ySUB, date.today())
+    setup.mainLoop(stdscr, windowManager, todoList, date.today())
    
 
 curses.wrapper(main)

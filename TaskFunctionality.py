@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import calendar
 
 class TaskObject:
-    def __init__(self, name, desc):
+    def __init__(self, name, desc, today, tag='0'):
         self.name = name
         self.desc = desc
         self.hasChildren = False
@@ -15,7 +15,8 @@ class TaskObject:
         self.overdue = False
         self.completed = False
         self.recurring = False
-        self.currentCreatedOn = 0
+        self.currentCreatedOn = today
+        self.tag = tag
 
     def setRecurring(self, createOn, recurrenceFreq, dueDateSpacing):
         self.recurring = [createOn, recurrenceFreq, dueDateSpacing]
@@ -68,9 +69,10 @@ class TaskObject:
         attrs = []
         if self.overdue: attrs = [c.color_pair(1)]
         if self.completed: attrs = [c.color_pair(2)]
-        label = f'{box}  {self.name}: {self.desc}, due on {self.dueDate}'
-        if self.recurring: label += f', recur on {self.currentCreatedOn + timedelta(days=self.recurring[1])}'
-        return label, attrs
+        line1 = f'{box}  {self.name}:  tag {self.tag}, due on {self.dueDate}'
+        line2 = f'        {self.desc}'
+        if self.recurring: line1 += f', recur after {self.currentCreatedOn + timedelta(days=self.recurring[1])}'
+        return line1, line2, attrs
 
     def returnJson(self):
         if self.recurring == False:
@@ -85,20 +87,24 @@ class TaskObject:
                 'completed':self.completed,
                 'duedate':[self.dueDate.year, self.dueDate.month, self.dueDate.day],
                 'recurring':recur,
-                'currentCreatedOn':[self.currentCreatedOn.year,self.currentCreatedOn.month,self.currentCreatedOn.day]}
+                'currentCreatedOn':[self.currentCreatedOn.year,self.currentCreatedOn.month,self.currentCreatedOn.day],
+                'tag':self.tag}
 
 class ToDoList:
     def __init__(self):
         self.tasks = []
 
-    def readTasks(self):
+    def sort(self):
+        self.tasks = sorted(self.tasks, key=lambda task: task.tag)
+
+    def readTasks(self, today):
         with open('savedData.json', 'r') as data:
             tasks = list(json.loads(data.read()).values())
             for task in tasks:
-                self.tasks.append(self.createTaskFromJson(task))
+                self.tasks.append(self.createTaskFromJson(task, today))
 
-    def createTaskFromJson(self, entry):
-        task = TaskObject(entry['name'], entry['desc'])
+    def createTaskFromJson(self, entry, today):
+        task = TaskObject(entry['name'], entry['desc'], today, entry['tag'])
         task.checked = entry['checked']
         task.completed = entry['completed']
         duey, duem, dued = entry['duedate']

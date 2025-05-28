@@ -25,3 +25,10 @@ Press on a task in the task window and press the 'delete task' button. It will d
 This was just for debugging. Enter a date and press the "Current date" button and it will change "todays" date.
 ### Exiting:
 When nothing is selected, press 'q'!
+
+# Next
+Recurring tasks on specific days of the week (every m,t,w for example)
+
+Better date inputting? Keywords etc
+
+Tagging and sorting
